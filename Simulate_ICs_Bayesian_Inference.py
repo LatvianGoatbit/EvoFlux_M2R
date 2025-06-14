@@ -419,6 +419,8 @@ sns.despine()
 plt.savefig(f"{"Mu"}.png")
 plt.close()
 
+# Posterior plots in ArviZ
+
 az.plot_posterior(fit, var_names=['mu', 'tau_rel', 'theta'])
 plt.tight_layout()
 sns.despine
