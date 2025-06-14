@@ -168,7 +168,7 @@ model {
     pop_size_log ~ normal((SminLog + SmaxLog) / 2, (SmaxLog + SminLog) / 4);
 
     // Model
-    target += sum(homo_demeth_logpdf(y, theta, mu, tau, T, N));
+    target += sum(homo_demeth_logpdf(y, theta, mu, tau, T, N)); // Given more time, attempt to produce a mixture model for the whole distribution, and do Bayesian Inference on this model instead.
 }
 
 generated quantities {
