@@ -239,84 +239,7 @@ def stochastic_growth(theta, tau, mu, gamma, nu, zeta, T, NSIM, init = None):
 
     return betaCancer
 
-def calculate_mixing_weight_lpmf(mu, gamma, nu, zeta, tau):
-    # generate distribution of fCpG loci when population begins growing 
-    # at t=tau
-    RateMatrix = np.array([[-2*gamma, nu, 0], 
-                            [2*gamma, -(nu+zeta), 2*mu], 
-                            [0, zeta, -2*mu]])
-    
-    # assume population is either homozygous methylated or demethylated at t=0
-    mkw = np.array([0.5, 0, 0.5]).T
-
-    # use matrix exponentiation to solve to for the mixing weights
-    ProbStates = linalg.expm(RateMatrix * tau) @ mkw
-
-    return np.log(ProbStates)
-
-def calculate_frechet_parameters(mut_rate, theta, deltaT):
-
-    a = np.exp(1) / 2
-    m_norm = 0.5 * mut_rate / theta * (theta * deltaT + np.log(mut_rate / theta ) - (1 + a))
-    s_norm = 0.5 * np.exp(1) * mut_rate / theta
-
-    return a, m_norm, s_norm
-
-def demeth_homo_init_lpdf(y, theta, mu, tau, T):
-
-    a, m_norm, s_norm = calculate_frechet_parameters(2 * mu, theta, T - tau)
-
-    return invweibull.logpdf(y, a, loc = m_norm, scale = s_norm)
-
-def meth_homo_init_lpdf(y, theta, gamma, tau, T):
-
-    a, m_norm, s_norm = calculate_frechet_parameters(2 * gamma, theta, T - tau)
-
-    return invweibull.logpdf(1-y, a, loc = m_norm, scale = s_norm)
-
-def hetero_integrand(x, z, theta, nu, zeta, tau, T):
-
-    a, m1_norm, s1_norm = calculate_frechet_parameters(nu, theta, T - tau)
-    a, m2_norm, s2_norm = calculate_frechet_parameters(zeta, theta, T - tau)
-
-    return np.exp(invweibull.logpdf(x, a, loc = m2_norm, scale = s2_norm) 
-                  + invweibull.logpdf(z-0.5+x, a, loc = m1_norm, scale = s1_norm))
-
-def meth_hetero_init_lpdf(y, theta, nu, zeta, tau, T):
-    
-    if isinstance(y, (list, tuple, np.ndarray)):
-        integral = np.array([quad(hetero_integrand, 0, 1, 
-                                args=(y_i, theta, nu, zeta, tau, T))[0]
-                            for y_i in y])
-    else:
-        integral = quad(hetero_integrand, 0, 1, 
-                            args=(y, theta, nu, zeta, tau, T))[0]
-
-    return np.log(integral)
-
-def combined_lpdf(y, theta, tau, mu, gamma, nu, zeta, T):
-
-    mixing_lpdf = calculate_mixing_weight_lpmf(mu, gamma, nu, zeta, tau)
-
-    left_peak = demeth_homo_init_lpdf(y, theta, gamma, tau, T)
-    central_peak = meth_hetero_init_lpdf(y, theta, nu, zeta, tau, T)
-    right_peak = meth_homo_init_lpdf(y, theta, mu, tau, T)
-
-    # Combine using logsumexp: log(w1*p1 + w2*p2 + w3*p3) = 
-    # logsumexp([log(w1)+log(p1), log(w2)+log(p2), log(w3)+log(p3)])
-    log_weighted_components = np.array([
-        mixing_lpdf[0] + left_peak,    # log(w1) + log(p1) for demethylated homozygous
-        mixing_lpdf[1] + central_peak, # log(w2) + log(p2) for heterozygous  
-        mixing_lpdf[2] + right_peak    # log(w3) + log(p3) for methylated homozygous
-    ])
-    
-    # Use logsumexp to compute the final combined log probability density
-    combined_lpdf = logsumexp(log_weighted_components, axis=0)
-    
-    return combined_lpdf
-
-
-
+# We were given these values for each parameter by our supervisor.
 T = 50
 tau = 45
 theta = 2.4
@@ -327,6 +250,7 @@ zeta = gamma
 N  = 10000
 init = 0
 
+# Each different simulated data set is relevant for each necessary graph for each peak- the balanced data set would be used if a mixture model was constructed.
 betaCancer = stochastic_growth(theta, tau, mu, gamma, nu, zeta, T, N, init)
 betaCancer_balanced = stochastic_growth(theta, tau, mu, gamma, nu, zeta, T, N)
 betaCancer_meth = stochastic_growth(theta, tau, mu, gamma, nu, zeta, T, N, 2)
@@ -343,20 +267,19 @@ data_dict = {
 
 
 
-# Need to set inits for model.sample to not throw error due to definition of frechet_lpdf
+# Need to set inits for model.sample to not throw error due to definition of frechet_lpdf. Sampling limits were up to 4000 for iter_warmup and iter_sampling each.
 fit = model.sample(data = data_dict, inits = {
     "tau_rel": 0.9,
     "mu": 0.001,
     "gamma": 0.001,
     "nu_rel": 0.001,
     "zeta_rel": 0.001,
-    "theta": np.exp(3)}, iter_warmup = 4000, iter_sampling = 4000)
+    "theta": np.exp(3)})
 
 df = fit.draws_pd()
 df.to_csv('fit_draws.csv')
 
 # Extraction of the relevant samples for each parameter, plotting and calculating R_hat
-
 theta_x = np.linspace(0, 20, 1001)
 theta_samples = fit.stan_variable("theta")
 n_draws = theta_samples.shape[0] // 4
@@ -420,7 +343,6 @@ plt.savefig(f"{"Mu"}.png")
 plt.close()
 
 # Posterior plots in ArviZ
-
 az.plot_posterior(fit, var_names=['mu', 'tau_rel', 'theta'])
 plt.tight_layout()
 sns.despine
@@ -428,7 +350,6 @@ plt.savefig(f"{"Posterior_plots"}.png")
 plt.close()
 
 # Convert to Inference data for use in ArviZ
-
 idata = az.from_cmdstanpy(fit)
 az.plot_trace(idata, var_names = ['mu', 'tau_rel', 'theta'])
 plt.tight_layout()
@@ -441,7 +362,6 @@ sns.despine()
 plt.savefig(f"{"Pair_Plots"}.png")
 
 # Assess relevant MCMC diagnostics
-
 R_hats = {
     "theta": R_hat_theta,
     "tau_rel": R_hat_tau_rel,
