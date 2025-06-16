@@ -68,7 +68,7 @@ functions {
         real nu = theta_array[1];
         real zeta = theta_array[2];
         real tau = theta_array[3];
-        real theta = theta_array[4]; // theta renamed for readability
+        real theta = theta_array[4]; 
         real z = x_r[1];
         int T = x_i[1];
 
